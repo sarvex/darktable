@@ -27,82 +27,77 @@ alloc_regex = r"([a-zA-Z0-9_\-\>\.\[\]]+) = (dt_|c|m|dt_opencl_)alloc.*\(.+\)"
 
 def find_call_and_line(elem, file, directory):
   line_number = 0
-  f = open(os.path.join(directory, file), "r")
-
-  # find the line(s) in file
-  for line in f:
-    line_number += 1
-    if elem in line:
-      print("\t\t line", line_number, ":", elem.strip())
-
-  f.close()
+  with open(os.path.join(directory, file), "r") as f:
+    # find the line(s) in file
+    for line in f:
+      line_number += 1
+      if elem in line:
+        print("\t\t line", line_number, ":", elem.strip())
 
 for file in sorted(os.listdir(directory)):
   if file.endswith(".c") or file.endswith(".h"):
-    f = open(os.path.join(directory, file), "r")
-    content = f.read()
+    with open(os.path.join(directory, file), "r") as f:
+      content = f.read()
 
-    # Find all allocs and extract the name of the pointer to the allocation
-    matches = re.finditer(alloc_regex, content, re.MULTILINE)
+      # Find all allocs and extract the name of the pointer to the allocation
+      matches = re.finditer(alloc_regex, content, re.MULTILINE)
 
-    safe_allocs = 0
-    faulty_allocs = 0
-    suspicious_allocs = 0
+      safe_allocs = 0
+      faulty_allocs = 0
+      suspicious_allocs = 0
 
-    print("%s" % file)
+      print(f"{file}")
 
-    for matchNum, match in enumerate(matches):
-      # Get the name of the pointer to the allocation
-      variable_name = match.group(1)
-      alloc_type = match.group(2)
+      for matchNum, match in enumerate(matches):
+        # Get the name of the pointer to the allocation
+        variable_name = match.group(1)
+        alloc_type = match.group(2)
 
-      # Look how many times the variable is allocated
-      variable_alloc_regex = " %s = %salloc.*\(.+\)" % (variable_name, alloc_type)
-      matches2 = re.findall(variable_alloc_regex, content, re.MULTILINE)
-      allocs = len(matches2)
-      matches2 = set(matches2)
+        # Look how many times the variable is allocated
+        variable_alloc_regex = " %s = %salloc.*\(.+\)" % (variable_name, alloc_type)
+        matches2 = re.findall(variable_alloc_regex, content, re.MULTILINE)
+        allocs = len(matches2)
+        matches2 = set(matches2)
 
-      # Look how many times the variable is freed
-      variable_free_regex = r""
-      buffer_type = ""
-      if(alloc_type == "dt_opencl_"):
-        variable_free_regex  = ".*release_mem_object.*\(%s\)" % variable_name
-        buffer_type = "OpenCL"
-      else:
-        variable_free_regex  = " \S*free.*\(%s\)" % variable_name
-        buffer_type = "C"
-      matches3 = re.findall(variable_free_regex, content, re.MULTILINE)
-      frees = len(matches3)
-      matches3 = set(matches3)
+        # Look how many times the variable is freed
+        variable_free_regex = r""
+        buffer_type = ""
+        if(alloc_type == "dt_opencl_"):
+          variable_free_regex  = ".*release_mem_object.*\(%s\)" % variable_name
+          buffer_type = "OpenCL"
+        else:
+          variable_free_regex  = " \S*free.*\(%s\)" % variable_name
+          buffer_type = "C"
+        matches3 = re.findall(variable_free_regex, content, re.MULTILINE)
+        frees = len(matches3)
+        matches3 = set(matches3)
 
-      # Note that for OpenCL, we may have more than one free for each alloc because of the error go-to
-      if(frees < allocs and frees == 0):
-        print("\tERROR: %s buffer `%s` is allocated %i time(s) but never freed" % (buffer_type, variable_name, allocs))
-        for elem in matches2:
-          find_call_and_line(elem, file, directory)
-        for elem in matches3:
-          find_call_and_line(elem, file, directory)
+        # Note that for OpenCL, we may have more than one free for each alloc because of the error go-to
+        if(frees < allocs and frees == 0):
+          print("\tERROR: %s buffer `%s` is allocated %i time(s) but never freed" % (buffer_type, variable_name, allocs))
+          for elem in matches2:
+            find_call_and_line(elem, file, directory)
+          for elem in matches3:
+            find_call_and_line(elem, file, directory)
 
-        faulty_allocs += 1
+          faulty_allocs += 1
 
-      elif(frees < allocs and frees > 0):
-        print("\tWARNING: %s buffer `%s` is allocated %i time(s) but freed %i time(s)" % (buffer_type, variable_name, allocs, frees))
-        for elem in matches2:
-          find_call_and_line(elem, file, directory)
-        for elem in matches3:
-          find_call_and_line(elem, file, directory)
+        elif(frees < allocs and frees > 0):
+          print("\tWARNING: %s buffer `%s` is allocated %i time(s) but freed %i time(s)" % (buffer_type, variable_name, allocs, frees))
+          for elem in matches2:
+            find_call_and_line(elem, file, directory)
+          for elem in matches3:
+            find_call_and_line(elem, file, directory)
 
-        suspicious_allocs += 1
+          suspicious_allocs += 1
 
-      else:
-        safe_allocs += 1
+        else:
+          safe_allocs += 1
 
-    msg_type = "INFO"
-    if(suspicious_allocs > 0):
-      msg_type = "WARNING"
-    if(faulty_allocs > 0):
-      msg_type = "ERROR"
+      msg_type = "INFO"
+      if(suspicious_allocs > 0):
+        msg_type = "WARNING"
+      if(faulty_allocs > 0):
+        msg_type = "ERROR"
 
-    print("\t%s: %i safe alloc(s) detected over %i\n" % (msg_type, safe_allocs, safe_allocs + faulty_allocs + suspicious_allocs))
-
-    f.close()
+      print("\t%s: %i safe alloc(s) detected over %i\n" % (msg_type, safe_allocs, safe_allocs + faulty_allocs + suspicious_allocs))

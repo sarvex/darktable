@@ -28,11 +28,8 @@ def whereami():
    if exe == '':
       ## invoked without a pathname, so assume running from current directory
       return os.getcwd()
-   path = path + '/'
-   if path[0] == '/' or path[0] == '\\':
-      return path
-   else:
-      return os.getcwd() + '/' + path
+   path = f'{path}/'
+   return path if path[0] in ['/', '\\'] else f'{os.getcwd()}/{path}'
 
 def locate_program(program):
    '''locate executable in standard locations if specified without a path
@@ -43,35 +40,29 @@ def locate_program(program):
    global VERBOSE
    if '/' in program or '\\' in program:
       # is this a relative or absolute path?
-      if program[0] == '/' or program[0] == '\\':
-         return program
-      # relative path, so prepend current working directory
-      return os.getcwd() + '/' + program
-   else:
-      # no path given, so check the standard locations
-      loc = whereami()
-      # are we in the source tree?
-      if 'src/tests/benchmark' in loc:
-         # check if available in the build directory
-         build, _, __ = loc.partition('src/tests/benchmark')
-         build += 'build/bin/'
-         if os.path.exists(build+program):
-            return build+program
-         if VERBOSE:
-            print(f'  did not find {program} in build/bin')
-      # are we in a sibling of the source tree?
-      if os.path.exists('../darktable/src/tests/benchmark'):
-         build = '../darktable/build/bin/'
-         if os.path.exists(build+program):
-            return build+program
-         if VERBOSE:
-            print(f'  did not find {program} in {build}')
-      # last location: check if on search path
-      onpath = which(program)
-      if onpath:
-         return onpath
+      return program if program[0] in ['/', '\\'] else f'{os.getcwd()}/{program}'
+   # no path given, so check the standard locations
+   loc = whereami()
+   # are we in the source tree?
+   if 'src/tests/benchmark' in loc:
+      # check if available in the build directory
+      build, _, __ = loc.partition('src/tests/benchmark')
+      build += 'build/bin/'
+      if os.path.exists(build+program):
+         return build+program
       if VERBOSE:
-         print(f'  did not find {program} on search path')
+         print(f'  did not find {program} in build/bin')
+   # are we in a sibling of the source tree?
+   if os.path.exists('../darktable/src/tests/benchmark'):
+      build = '../darktable/build/bin/'
+      if os.path.exists(build+program):
+         return build+program
+      if VERBOSE:
+         print(f'  did not find {program} in {build}')
+   if onpath := which(program):
+      return onpath
+   if VERBOSE:
+      print(f'  did not find {program} on search path')
    # finally: give up
    print(f'Unable to locate {program}')
    exit(1)
@@ -85,47 +76,44 @@ def locate_image(image):
    global VERBOSE
    if '/' in image or '\\' in image:
       # is this a relative or absolute path?
-      if image[0] == '/' or image[0] == '\\':
-         return image
-      # relative path, so prepend current working directory
-      return os.getcwd() + '/' + image
-   else:
+      return image if image[0] in ['/', '\\'] else f'{os.getcwd()}/{image}'
       # check standard locations if no path given
       # first: current directory
-      if os.path.exists(image):
-         return os.getcwd()+ '/' + image
+   if os.path.exists(image):
+      return f'{os.getcwd()}/{image}'
+   if VERBOSE:
+      print(f'  did not find {image} in current directory')
+   # second: same directory as this script
+   loc = whereami()
+   if os.path.exists(loc+image):
+      return loc+image
+   if VERBOSE:
+      print(f'  did not find {image} in {loc}')
+   # third: script is in source dir, so look in integration tests
+   if 'src/tests/benchmark' in loc:
+      integ, _, __ = loc.partition('benchmark')
+      integ += 'integration/images/'
+      if os.path.exists(integ+image):
+         return integ+image
       if VERBOSE:
-         print(f'  did not find {image} in current directory')
-      # second: same directory as this script
-      loc = whereami()
-      if os.path.exists(loc+image):
-         return loc+image
+         print(f'  did not find {image} in {integ}')
+   # fourth: we are in integration-test dir and script is in source dir, so look in integration tests
+   if 'integration/../benchmark' in loc:
+      integ, _, __ = loc.partition('/../benchmark')
+      integ += '/images/'
+      if os.path.exists(integ+image):
+         return integ+image
       if VERBOSE:
-         print(f'  did not find {image} in {loc}')
-      # third: script is in source dir, so look in integration tests
-      if 'src/tests/benchmark' in loc:
-         integ, _, __ = loc.partition('benchmark')
-         integ += 'integration/images/'
-         if os.path.exists(integ+image):
-            return integ+image
-         if VERBOSE:
-            print(f'  did not find {image} in {integ}')
-      # fourth: we are in integration-test dir and script is in source dir, so look in integration tests
-      if 'integration/../benchmark' in loc:
-         integ, _, __ = loc.partition('/../benchmark')
-         integ += '/images/'
-         if os.path.exists(integ+image):
-            return integ+image
-         if VERBOSE:
-            print(f'  did not find {image} in {integ}')
+         print(f'  did not find {image} in {integ}')
       # fifth: script is not in source dir, but current dir is top of source tree
-      img = os.getcwd() + '/src/tests/integration/images/mire1.cr2'
-      if os.path.exists(img):
-         return img
+   img = f'{os.getcwd()}/src/tests/integration/images/mire1.cr2'
+   if os.path.exists(img):
+      return img
       # sixth: we are in a sibling of the darktable source tree
-      candidate = os.getcwd() + '/../darktable/src/tests/integration/images/mire1.cr2'
-      if os.path.exists(candidate):
-         return candidate
+   candidate = (
+       f'{os.getcwd()}/../darktable/src/tests/integration/images/mire1.cr2')
+   if os.path.exists(candidate):
+      return candidate
    # finally: give up
    print(f'Unable to locate {image}')
    exit(1)
@@ -140,34 +128,28 @@ def locate_xmp(xmp,version):
    if xmp.endswith('.xmp'):
       xmp = xmp[:-4]
    if version:
-      xmp = xmp + '-' + version + '.xmp'
+      xmp = f'{xmp}-{version}.xmp'
    if '/' in xmp or '\\' in xmp:
       # is this a relative or absolute path?
-      if xmp[0] == '/' or xmp[0] == '\\':
-         return xmp
-      # relative path, so prepend current working directory
-      return os.getcwd() + '/' + xmp
-   else:
+      return xmp if xmp[0] in ['/', '\\'] else f'{os.getcwd()}/{xmp}'
       # check standard locations if no path given
       # first: current directory
-      if os.path.exists(xmp):
-         return os.getcwd() + '/' + xmp
-      if VERBOSE:
-         print(f'  did not find {xmp} in current directory')
-      # second: same directory as this script
-      loc = whereami()
-      if os.path.exists(loc+xmp):
-         return loc+xmp
-      if VERBOSE:
-         print(f'  did not find {xmp} in {loc}')
+   if os.path.exists(xmp):
+      return f'{os.getcwd()}/{xmp}'
+   if VERBOSE:
+      print(f'  did not find {xmp} in current directory')
+   # second: same directory as this script
+   loc = whereami()
+   if os.path.exists(loc+xmp):
+      return loc+xmp
+   if VERBOSE:
+      print(f'  did not find {xmp} in {loc}')
       # third: script is not in source dir, but current dir is top of source tree
-      xmp_path = os.getcwd() + '/src/tests/benchmark/' + xmp
-      if os.path.exists(xmp_path):
-         return xmp_path
-      if VERBOSE:
-         print(f'  did not find sidecar at {xmp_path}')
-      # fourth: TODO?
-
+   xmp_path = f'{os.getcwd()}/src/tests/benchmark/{xmp}'
+   if os.path.exists(xmp_path):
+      return xmp_path
+   if VERBOSE:
+      print(f'  did not find sidecar at {xmp_path}')
    # finally: give up
    print(f'Unable to locate sidecar {xmp}')
    exit(1)
@@ -197,7 +179,7 @@ def parse_commandline():
       parser.exit()
    args, remargs = parser.parse_known_args()
    global VERBOSE
-   VERBOSE = True if args.verbose else False
+   VERBOSE = bool(args.verbose)
    args.program = locate_program(args.program)
    args.image = locate_image(args.image)
    _, _, args.image_base = args.image.rpartition('/')
@@ -209,12 +191,10 @@ def parse_commandline():
       parser.print_usage()
       parser.exit()
    if os.path.exists(args.tempdir):
-      args.tempdir = args.tempdir + '/dtbench' + str(os.getpid())
-      os.mkdir(args.tempdir)
-   else:
-      os.mkdir(args.tempdir)
+      args.tempdir = f'{args.tempdir}/dtbench{os.getpid()}'
+   os.mkdir(args.tempdir)
    if VERBOSE:
-      print(f'  found:')
+      print('  found:')
       print(f'     {args.program}')
       print(f'     {args.image}')
       print(f'     {args.xmp}')
@@ -235,16 +215,16 @@ def extract_seconds(line):
    
 def run_benchmark(program,image,xmp,args):
    confdir=args.tempdir
-   outimage=args.tempdir+'/darktable-bench.png'
+   outimage = f'{args.tempdir}/darktable-bench.png'
    args.outimage=outimage
    if os.path.exists(outimage):
       os.remove(outimage)
    arglist = ["--hq","1",image,xmp,outimage,"--core","--library",":memory:","--configdir",confdir,"-d","perf"]
    if args.threads:
-      arglist = arglist + ["-t",args.threads]
+      arglist += ["-t",args.threads]
       os.environ["OMP_NUM_THREADS"] = str(args.threads)
    if args.cpuonly:
-      arglist = arglist + ["--disable-opencl"]
+      arglist += ["--disable-opencl"]
    os.environ['LANG'] = 'C'
    os.environ['LC_ALL'] = 'C'
    try:
@@ -270,19 +250,16 @@ def run_benchmark(program,image,xmp,args):
          savetime = extract_seconds(t)
       elif 'pipeline processing took' in t:
          pixpipe = extract_seconds(t)
-      else:
-         iop_match = iop_result_regex.search(t)
-         if iop_match:
-            iop_time = float(iop_match.group(1))
-            iop_name = iop_match.group(2)
-            iop_times[iop_name] = iop_time
+      elif iop_match := iop_result_regex.search(t):
+         iop_time = float(iop_match.group(1))
+         iop_name = iop_match.group(2)
+         iop_times[iop_name] = iop_time
    if savetime < 0:
       savetime = loadtime	# if no reported save time, assume it's the same as the time to load the image
    return pixpipe, loadtime+pixpipe+savetime, gpu, iop_times
 
 def warm_up_caches(program,image,xmp,args):
-   xmp = locate_xmp(xmp,'null')
-   if xmp:
+   if xmp := locate_xmp(xmp, 'null'):
       if VERBOSE:
          print(f'     {xmp}')
       print('Preparing...',end='',flush=True)
@@ -299,10 +276,7 @@ def get_version(program):
       return "(Undetermined darktable version)"
 
 def print_performance(pixpipe,total,dtversion,xmpversion,imagename,threads,used_gpu):
-   if used_gpu:
-      gpu = "using GPU"
-   else:
-      gpu = "CPU only"
+   gpu = "using GPU" if used_gpu else "CPU only"
    print('')
    print(f'{dtversion} ::: benchmark v{xmpversion} ::: image {imagename}')
    if threads:
@@ -324,8 +298,8 @@ def cleanup(args):
          # delete files in temp dir; since the ones darktable-cli creates all start with 'dar' or 'dat', limit the
          #  deletion to such files just in case
          for f in os.listdir(args.tempdir):
-            if f.startswith('da') and (f[2] == 'r' or f[2] == 't'):
-               os.remove(args.tempdir+'/'+f)
+            if f.startswith('da') and f[2] in ['r', 't']:
+               os.remove(f'{args.tempdir}/{f}')
          os.rmdir(args.tempdir)
       except:
          pass
