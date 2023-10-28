@@ -76,7 +76,7 @@ class modelines_updater_t:
 			file.write(CLANG_ON)
 			
 	def update(self):
-		print('parsing {}'.format(self.filename));
+		print(f'parsing {self.filename}');
 		self.load_lines()
 		for lineno,line in enumerate(self.lines):
 			self.process_line(line, lineno)

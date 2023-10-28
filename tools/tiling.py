@@ -29,14 +29,11 @@ directory = "../src/iop/"
 
 path = os.path.join(directory, sys.argv[1])
 
-if(not os.path.isfile(path)):
-  print("%s is not a file" % path)
+if (not os.path.isfile(path)):
+  print(f"{path} is not a file")
   exit(1)
 
-lang = ""
-if(len(sys.argv) > 2):
-  lang = sys.argv[2]
-
+lang = sys.argv[2] if (len(sys.argv) > 2) else ""
 f = open(path, "r")
 content = f.read()
 print(path)
@@ -46,7 +43,9 @@ excluded_keywords = [ "float", "size_t", "int", "uint", "uint8_t", "uint16_t", "
 def parse_allocs(regex, content):
   matches = re.finditer(regex, content, re.MULTILINE)
 
-  for matchNum, match in enumerate(matches):
+  # Try to find variables in arguments
+  variables_mask = r"([a-zA-Z\_]+\[{0,1}[0-9A-Z]*\]{0,1}[\-\>]*[a-zA-Z0-9\_]*\[{0,1}[0-9A-Z]*\]{0,1})"
+  for match in matches:
     # Get the name of the pointer to the allocation
     variable_name = match.group(1)
 
@@ -61,8 +60,6 @@ def parse_allocs(regex, content):
     args = args.split(",")
 
     for arg in args:
-      # Try to find variables in arguments
-      variables_mask = r"([a-zA-Z\_]+\[{0,1}[0-9A-Z]*\]{0,1}[\-\>]*[a-zA-Z0-9\_]*\[{0,1}[0-9A-Z]*\]{0,1})"
       variables = set(re.findall(variables_mask, arg))
 
       for var in variables:
@@ -73,27 +70,24 @@ def parse_allocs(regex, content):
           # Remove arrays if any
           var = re.sub(r"\[.*\]", "", var)
           declaration_mask = r"%s\[{0,1}[0-9A-Z]*\]{0,1} = .+;" % var
-          declarations = set(re.findall(declaration_mask, content))
-
-          # Print the declaration line of the variables if found
-          if(len(declarations) > 0):
+          if declarations := set(re.findall(declaration_mask, content)):
             for declaration in declarations:
               print("\t\t\t", declaration)
           else:
             print("\t\t\t no assignation found")
 
-if(lang == "C"):
+if lang == "C":
   print("C buffers allocated:")
   alloc_regex = r"([a-zA-Z0-9_\-\>\.\[\]]+) = (dt_|c|m)alloc.*\((.+)\)"
   parse_allocs(alloc_regex, content)
 
-elif(lang == "OpenCL"):
+elif lang == "OpenCL":
   print("\nOpenCL buffers allocated:")
   alloc_regex = r"([a-zA-Z0-9_\-\>\.\[\]]+) = dt_opencl(.*)alloc[a-zA-Z_-]*\((.+)\)"
   parse_allocs(alloc_regex, content)
 
 else:
-  print("Option 2 `%s` not recognized" % lang)
+  print(f"Option 2 `{lang}` not recognized")
   print("valid options are `C` or `OpenCL`")
   print("Example:")
   print("\t`python tiling.py filmicrgb.c OpenCL` for OpenCL buffers")
